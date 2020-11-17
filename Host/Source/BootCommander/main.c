@@ -522,7 +522,16 @@ static void DisplayProgramUsage(void)
   printf("  -b=[value]       The communication speed, a.k.a baudrate in bits per\n");
   printf("                   second, as a 32-bit value (Default = 57600).\n");
   printf("                   Supported values: 9600, 19200, 38400, 57600, 115200.\n");
-  printf("\n");  
+  printf("\n");
+  printf("XCP on RS485 settings (xcp_rs485):\n");
+  printf("  -d=[name]        Name of the communication device. For example COM1 or\n");
+  printf("                   /dev/ttyUSB0 (Mandatory).\n");
+  printf("  -b=[value]       The communication speed, a.k.a baudrate in bits per\n");
+  printf("                   second, as a 32-bit value (Default = 57600).\n");
+  printf("                   Supported values: 9600, 19200, 38400, 57600, 115200.\n");
+  printf("  -rid=[value]     RS485 receiver ID(Slave Address)\n");
+  printf("                   value (Default = 1).\n");
+  printf("\n");
   printf("XCP on CAN settings (xcp_can):\n");
   printf("  -d=[name]        Name of the CAN device (Mandatory). On Linux this is\n");
   printf("                   the name of the SocketCAN network interface, such as\n");
@@ -657,6 +666,9 @@ static void DisplayTransportInfo(uint32_t transportType, void const * transportS
     case BLT_TRANSPORT_XCP_V10_NET:
       printf("XCP on TCP/IP\n");
       break;
+    case BLT_TRANSPORT_XCP_V10_RS485:
+        printf("XCP on RS485\n");
+        break;
     default:
       printf("Unknown\n");
       break;
@@ -766,6 +778,37 @@ static void DisplayTransportInfo(uint32_t transportType, void const * transportS
         printf("  -> Port: %hu \n", xcpNetSettings->port);
       }
       break;
+    }
+    case BLT_TRANSPORT_XCP_V10_RS485:
+    {
+        /* Check settings pointer. */
+        assert(transportSettings);
+        if (transportSettings == NULL) /*lint !e774 */
+        {
+            /* No valid settings present. */
+            printf("  -> Invalid settings specified\n");
+        }
+        else
+        {
+            tBltTransportSettingsXcpV10Rs485* xcpRs485Settings =
+                (tBltTransportSettingsXcpV10Rs485*)transportSettings;
+
+            /* Output the settings to the user. */
+            printf("  -> Device: ");
+            if (xcpRs485Settings->portName != NULL)
+            {
+                printf("%s\n", xcpRs485Settings->portName);
+            }
+            else
+            {
+                printf("Unknown\n");
+            }
+            printf("  -> Baudrate: %u bit/sec\n", xcpRs485Settings->baudrate);
+            printf("  -> Slave Address(rid:receiver ID):%u\n", xcpRs485Settings->SlaveAddr);
+            printf("  -> Function Code:%u\n",xcpRs485Settings->FuncCode);
+            printf("  -> Register Addressr:%u\n", xcpRs485Settings->RegAddr);
+        }
+        break;
     }
     default:
       printf("  -> No settings specified\n");
@@ -1063,7 +1106,8 @@ static uint32_t ExtractTransportTypeFromCommandLine(int argc, char const * const
     { .name = "xcp_rs232", .value = BLT_TRANSPORT_XCP_V10_RS232 },
     { .name = "xcp_can", .value = BLT_TRANSPORT_XCP_V10_CAN },
     { .name = "xcp_usb", .value = BLT_TRANSPORT_XCP_V10_USB },
-    { .name = "xcp_net", .value = BLT_TRANSPORT_XCP_V10_NET }
+    { .name = "xcp_net", .value = BLT_TRANSPORT_XCP_V10_NET },
+    { .name = "xcp_rs485", .value = BLT_TRANSPORT_XCP_V10_RS485 }
   };
   
   /* Set the default transport type in case nothing was specified on the command line. */
@@ -1129,196 +1173,253 @@ static void * ExtractTransportSettingsFromCommandLine(int argc,
   /* Only continue if parameters are valid. */
   if (argv != NULL) /*lint !e774 */
   {
-    /* Filter on the session type. */
-    switch (transportType) 
-    {
-      /* -------------------------- XCP on RS232 ------------------------------------- */
-      case BLT_TRANSPORT_XCP_V10_RS232:
-        /* The following transport layer specific command line parameters are supported:
-         *   -d=[name]      -> Device name: /dev/ttyUSB0, COM1, etc.
-         *   -b=[value]     -> Baudrate in bits per second.
-         */
-        /* Allocate memory for storing the settings and check the result. */
-        result = malloc(sizeof(tBltTransportSettingsXcpV10Rs232));
-        assert(result != NULL);
-        if (result != NULL) /*lint !e774 */
-        {
-          /* Create typed pointer for easy reading. */
-          tBltTransportSettingsXcpV10Rs232 * rs232Settings = 
-            (tBltTransportSettingsXcpV10Rs232 *)result;
-          /* Set default values. */
-          rs232Settings->portName = NULL;
-          rs232Settings->baudrate = 57600;
-          /* Loop through all the command line parameters, just skip the 1st one because 
-           * this  is the name of the program, which we are not interested in.
-           */
-          for (paramIdx = 1; paramIdx < argc; paramIdx++)
-          {
-            /* Is this the -d=[name] parameter? */
-            if ( (strstr(argv[paramIdx], "-d=") != NULL) && 
-                 (strlen(argv[paramIdx]) > 3) )
-            {
-              /* Store the pointer to the device name. */
-              rs232Settings->portName = &argv[paramIdx][3];
-              /* Continue with next loop iteration. */
-              continue;
-            }
-            /* Is this the -b=[value] parameter? */
-            if ( (strstr(argv[paramIdx], "-b=") != NULL) && 
-                 (strlen(argv[paramIdx]) > 3) )
-            {
-              /* Extract the baudrate value. */
-              sscanf(&argv[paramIdx][3], "%u", &(rs232Settings->baudrate));
-              /* Continue with next loop iteration. */
-              continue;
-            }
-          }
-        }
-        break;
-      /* -------------------------- XCP on CAN --------------------------------------- */
-      case BLT_TRANSPORT_XCP_V10_CAN:
-        /* The following transport layer specific command line parameters are supported:
-         *   -d=[name]      -> Device name: peak_pcanusb, can0, etc.
-         *   -c=[value]     -> CAN channel index (32-bit).
-         *   -b=[value]     -> Baudrate in bits per second (32-bit).
-         *   -tid=[value]   -> Transmit CAN identifier (32-bit hexadecimal).
-         *   -rid=[value]   -> Receive CAN identifier (32-bit hexadecimal).
-         *   -xid=[value]   -> Flag for configuring extended CAN identifiers (8-bit).
-         */
-        /* Allocate memory for storing the settings and check the result. */
-        result = malloc(sizeof(tBltTransportSettingsXcpV10Can));
-        assert(result != NULL);
-        if (result != NULL) /*lint !e774 */
-        {
-          /* Create typed pointer for easy reading. */
-          tBltTransportSettingsXcpV10Can * canSettings =
-            (tBltTransportSettingsXcpV10Can *)result;
-          /* Set default values. */
-          canSettings->deviceName = NULL;
-          canSettings->deviceChannel = 0;
-          canSettings->baudrate = 500000;
-          canSettings->transmitId = 0x667;
-          canSettings->receiveId = 0x7E1;
-          canSettings->useExtended = false;
-          /* Loop through all the command line parameters, just skip the 1st one because 
-           * this  is the name of the program, which we are not interested in.
-           */
-          for (paramIdx = 1; paramIdx < argc; paramIdx++)
-          {
-            /* Is this the -d=[name] parameter? */
-            if ( (strstr(argv[paramIdx], "-d=") != NULL) && 
-                 (strlen(argv[paramIdx]) > 3) )
-            {
-              /* Store the pointer to the device name. */
-              canSettings->deviceName = &argv[paramIdx][3];
-              /* Continue with next loop iteration. */
-              continue;
-            }
-            /* Is this the -c=[value] parameter? */
-            if ( (strstr(argv[paramIdx], "-c=") != NULL) && 
-                 (strlen(argv[paramIdx]) > 3) )
-            {
-              /* Extract the channel index value. */
-              sscanf(&argv[paramIdx][3], "%u", &(canSettings->deviceChannel));
-              /* Continue with next loop iteration. */
-              continue;
-            }
-            /* Is this the -b=[value] parameter? */
-            if ( (strstr(argv[paramIdx], "-b=") != NULL) && 
-                 (strlen(argv[paramIdx]) > 3) )
-            {
-              /* Extract the baudrate value. */
-              sscanf(&argv[paramIdx][3], "%u", &(canSettings->baudrate));
-              /* Continue with next loop iteration. */
-              continue;
-            }
-            /* Is this the -tid=[value] parameter? */
-            if ( (strstr(argv[paramIdx], "-tid=") != NULL) && 
-                 (strlen(argv[paramIdx]) > 5) )
-            {
-              /* Extract the hexadecimal transmit CAN identifier value. */
-              sscanf(&argv[paramIdx][5], "%x", &(canSettings->transmitId));
-              /* Continue with next loop iteration. */
-              continue;
-            }
-            /* Is this the -rid=[value] parameter? */
-            if ( (strstr(argv[paramIdx], "-rid=") != NULL) && 
-                 (strlen(argv[paramIdx]) > 5) )
-            {
-              /* Extract the hexadecimal receive CAN identifier value. */
-              sscanf(&argv[paramIdx][5], "%x", &(canSettings->receiveId));
-              /* Continue with next loop iteration. */
-              continue;
-            }
-            /* Is this the -xid=[value] parameter? */
-            if ( (strstr(argv[paramIdx], "-xid=") != NULL) && 
-                 (strlen(argv[paramIdx]) > 5) )
-            {
-              /* Extract the extended CAN identifier configuration value. */
-              static uint8_t xidValue;
-              sscanf(&argv[paramIdx][5], "%hhu", &xidValue);
-              /* Convert to boolean. */
-              canSettings->useExtended = ((xidValue > 0) ? true : false);
-              /* Continue with next loop iteration. */
-              continue;
-            }
-          }
-        }
-        break;
-      /* -------------------------- XCP on USB --------------------------------------- */
-      case BLT_TRANSPORT_XCP_V10_USB:
-        /* No additional command line parameters are neede for the USB transport
-         * layer. 
-         */
-        break;
-        /* -------------------------- XCP on TCP/IP ---------------------------------- */
-        case BLT_TRANSPORT_XCP_V10_NET:
-          /* The following transport layer specific command line parameters are supported:
-           *   -a=[value]     -> The IP address or hostname of the target to connect to.
-           *   -p=[value]     -> The TCP port number to use.
-           */
-          /* Allocate memory for storing the settings and check the result. */
-          result = malloc(sizeof(tBltTransportSettingsXcpV10Net));
-          assert(result != NULL);
-          if (result != NULL) /*lint !e774 */
-          {
-            /* Create typed pointer for easy reading. */
-            tBltTransportSettingsXcpV10Net * netSettings =
-              (tBltTransportSettingsXcpV10Net *)result;
-            /* Set default values. */
-            netSettings->address = NULL;
-            netSettings->port = 1000;
-            /* Loop through all the command line parameters, just skip the 1st one because
-             * this  is the name of the program, which we are not interested in.
-             */
-            for (paramIdx = 1; paramIdx < argc; paramIdx++)
-            {
-              /* Is this the -a=[name] parameter? */
-              if ( (strstr(argv[paramIdx], "-a=") != NULL) &&
-                   (strlen(argv[paramIdx]) > 3) )
-              {
-                /* Store the pointer to the network address. */
-                netSettings->address = &argv[paramIdx][3];
-                /* Continue with next loop iteration. */
-                continue;
-              }
-              /* Is this the -p=[value] parameter? */
-              if ( (strstr(argv[paramIdx], "-p=") != NULL) &&
-                   (strlen(argv[paramIdx]) > 3) )
-              {
-                /* Extract the port value. */
-                sscanf(&argv[paramIdx][3], "%hu", &(netSettings->port));
-                /* Continue with next loop iteration. */
-                continue;
-              }
-            }
-          }
-          break;
-      /* -------------------------- Unknown ------------------------------------------ */
-      default:
-        /* Noting to extract. */
-        break;
-    }
+	  /* Filter on the session type. */
+	  switch (transportType)
+	  {
+		  /* -------------------------- XCP on RS232 ------------------------------------- */
+	  case BLT_TRANSPORT_XCP_V10_RS232:
+		  /* The following transport layer specific command line parameters are supported:
+		   *   -d=[name]      -> Device name: /dev/ttyUSB0, COM1, etc.
+		   *   -b=[value]     -> Baudrate in bits per second.
+		   */
+		   /* Allocate memory for storing the settings and check the result. */
+		  result = malloc(sizeof(tBltTransportSettingsXcpV10Rs232));
+		  assert(result != NULL);
+		  if (result != NULL) /*lint !e774 */
+		  {
+			  /* Create typed pointer for easy reading. */
+			  tBltTransportSettingsXcpV10Rs232* rs232Settings =
+				  (tBltTransportSettingsXcpV10Rs232*)result;
+			  /* Set default values. */
+			  rs232Settings->portName = NULL;
+			  rs232Settings->baudrate = 57600;
+			  /* Loop through all the command line parameters, just skip the 1st one because
+			   * this  is the name of the program, which we are not interested in.
+			   */
+			  for (paramIdx = 1; paramIdx < argc; paramIdx++)
+			  {
+				  /* Is this the -d=[name] parameter? */
+				  if ((strstr(argv[paramIdx], "-d=") != NULL) &&
+					  (strlen(argv[paramIdx]) > 3))
+				  {
+					  /* Store the pointer to the device name. */
+					  rs232Settings->portName = &argv[paramIdx][3];
+					  /* Continue with next loop iteration. */
+					  continue;
+				  }
+				  /* Is this the -b=[value] parameter? */
+				  if ((strstr(argv[paramIdx], "-b=") != NULL) &&
+					  (strlen(argv[paramIdx]) > 3))
+				  {
+					  /* Extract the baudrate value. */
+					  sscanf(&argv[paramIdx][3], "%u", &(rs232Settings->baudrate));
+					  /* Continue with next loop iteration. */
+					  continue;
+				  }
+			  }
+		  }
+		  break;
+		  /* -------------------------- XCP on CAN --------------------------------------- */
+	  case BLT_TRANSPORT_XCP_V10_CAN:
+		  /* The following transport layer specific command line parameters are supported:
+		   *   -d=[name]      -> Device name: peak_pcanusb, can0, etc.
+		   *   -c=[value]     -> CAN channel index (32-bit).
+		   *   -b=[value]     -> Baudrate in bits per second (32-bit).
+		   *   -tid=[value]   -> Transmit CAN identifier (32-bit hexadecimal).
+		   *   -rid=[value]   -> Receive CAN identifier (32-bit hexadecimal).
+		   *   -xid=[value]   -> Flag for configuring extended CAN identifiers (8-bit).
+		   */
+		   /* Allocate memory for storing the settings and check the result. */
+		  result = malloc(sizeof(tBltTransportSettingsXcpV10Can));
+		  assert(result != NULL);
+		  if (result != NULL) /*lint !e774 */
+		  {
+			  /* Create typed pointer for easy reading. */
+			  tBltTransportSettingsXcpV10Can* canSettings =
+				  (tBltTransportSettingsXcpV10Can*)result;
+			  /* Set default values. */
+			  canSettings->deviceName = NULL;
+			  canSettings->deviceChannel = 0;
+			  canSettings->baudrate = 500000;
+			  canSettings->transmitId = 0x667;
+			  canSettings->receiveId = 0x7E1;
+			  canSettings->useExtended = false;
+			  /* Loop through all the command line parameters, just skip the 1st one because
+			   * this  is the name of the program, which we are not interested in.
+			   */
+			  for (paramIdx = 1; paramIdx < argc; paramIdx++)
+			  {
+				  /* Is this the -d=[name] parameter? */
+				  if ((strstr(argv[paramIdx], "-d=") != NULL) &&
+					  (strlen(argv[paramIdx]) > 3))
+				  {
+					  /* Store the pointer to the device name. */
+					  canSettings->deviceName = &argv[paramIdx][3];
+					  /* Continue with next loop iteration. */
+					  continue;
+				  }
+				  /* Is this the -c=[value] parameter? */
+				  if ((strstr(argv[paramIdx], "-c=") != NULL) &&
+					  (strlen(argv[paramIdx]) > 3))
+				  {
+					  /* Extract the channel index value. */
+					  sscanf(&argv[paramIdx][3], "%u", &(canSettings->deviceChannel));
+					  /* Continue with next loop iteration. */
+					  continue;
+				  }
+				  /* Is this the -b=[value] parameter? */
+				  if ((strstr(argv[paramIdx], "-b=") != NULL) &&
+					  (strlen(argv[paramIdx]) > 3))
+				  {
+					  /* Extract the baudrate value. */
+					  sscanf(&argv[paramIdx][3], "%u", &(canSettings->baudrate));
+					  /* Continue with next loop iteration. */
+					  continue;
+				  }
+				  /* Is this the -tid=[value] parameter? */
+				  if ((strstr(argv[paramIdx], "-tid=") != NULL) &&
+					  (strlen(argv[paramIdx]) > 5))
+				  {
+					  /* Extract the hexadecimal transmit CAN identifier value. */
+					  sscanf(&argv[paramIdx][5], "%x", &(canSettings->transmitId));
+					  /* Continue with next loop iteration. */
+					  continue;
+				  }
+				  /* Is this the -rid=[value] parameter? */
+				  if ((strstr(argv[paramIdx], "-rid=") != NULL) &&
+					  (strlen(argv[paramIdx]) > 5))
+				  {
+					  /* Extract the hexadecimal receive CAN identifier value. */
+					  sscanf(&argv[paramIdx][5], "%x", &(canSettings->receiveId));
+					  /* Continue with next loop iteration. */
+					  continue;
+				  }
+				  /* Is this the -xid=[value] parameter? */
+				  if ((strstr(argv[paramIdx], "-xid=") != NULL) &&
+					  (strlen(argv[paramIdx]) > 5))
+				  {
+					  /* Extract the extended CAN identifier configuration value. */
+					  static uint8_t xidValue;
+					  sscanf(&argv[paramIdx][5], "%hhu", &xidValue);
+					  /* Convert to boolean. */
+					  canSettings->useExtended = ((xidValue > 0) ? true : false);
+					  /* Continue with next loop iteration. */
+					  continue;
+				  }
+			  }
+		  }
+		  break;
+		  /* -------------------------- XCP on USB --------------------------------------- */
+	  case BLT_TRANSPORT_XCP_V10_USB:
+		  /* No additional command line parameters are neede for the USB transport
+		   * layer.
+		   */
+		  break;
+		  /* -------------------------- XCP on TCP/IP ---------------------------------- */
+	  case BLT_TRANSPORT_XCP_V10_NET:
+		  /* The following transport layer specific command line parameters are supported:
+		   *   -a=[value]     -> The IP address or hostname of the target to connect to.
+		   *   -p=[value]     -> The TCP port number to use.
+		   */
+		   /* Allocate memory for storing the settings and check the result. */
+		  result = malloc(sizeof(tBltTransportSettingsXcpV10Net));
+		  assert(result != NULL);
+		  if (result != NULL) /*lint !e774 */
+		  {
+			  /* Create typed pointer for easy reading. */
+			  tBltTransportSettingsXcpV10Net* netSettings =
+				  (tBltTransportSettingsXcpV10Net*)result;
+			  /* Set default values. */
+			  netSettings->address = NULL;
+			  netSettings->port = 1000;
+			  /* Loop through all the command line parameters, just skip the 1st one because
+			   * this  is the name of the program, which we are not interested in.
+			   */
+			  for (paramIdx = 1; paramIdx < argc; paramIdx++)
+			  {
+				  /* Is this the -a=[name] parameter? */
+				  if ((strstr(argv[paramIdx], "-a=") != NULL) &&
+					  (strlen(argv[paramIdx]) > 3))
+				  {
+					  /* Store the pointer to the network address. */
+					  netSettings->address = &argv[paramIdx][3];
+					  /* Continue with next loop iteration. */
+					  continue;
+				  }
+				  /* Is this the -p=[value] parameter? */
+				  if ((strstr(argv[paramIdx], "-p=") != NULL) &&
+					  (strlen(argv[paramIdx]) > 3))
+				  {
+					  /* Extract the port value. */
+					  sscanf(&argv[paramIdx][3], "%hu", &(netSettings->port));
+					  /* Continue with next loop iteration. */
+					  continue;
+				  }
+			  }
+		  }
+		  break;
+		  /* -------------------------- XCP on RS485 ------------------------------------- */
+	  case BLT_TRANSPORT_XCP_V10_RS485:
+		  /* The following transport layer specific command line parameters are supported:
+		   *   -d=[name]      -> Device name: /dev/ttyUSB0, COM1, etc.
+		   *   -b=[value]     -> Baudrate in bits per second.
+		   */
+		   /* Allocate memory for storing the settings and check the result. */
+		  result = malloc(sizeof(tBltTransportSettingsXcpV10Rs485));
+		  assert(result != NULL);
+		  if (result != NULL) /*lint !e774 */
+		  {
+			  /* Create typed pointer for easy reading. */
+			  tBltTransportSettingsXcpV10Rs485* rs485Settings =
+				  (tBltTransportSettingsXcpV10Rs485*)result;
+			  /* Set default values. */
+			  rs485Settings->portName = NULL;
+              rs485Settings->SlaveAddr = 0x0001;
+			  rs485Settings->baudrate = 115200;
+              rs485Settings->RegAddr = 0x001F;
+              rs485Settings->FuncCode = 16;
+              rs485Settings->CRC16 = 0x00;
+			  /* Loop through all the command line parameters, just skip the 1st one because
+			   * this  is the name of the program, which we are not interested in.
+			   */
+			  for (paramIdx = 1; paramIdx < argc; paramIdx++)
+			  {
+				  /* Is this the -d=[name] parameter? */
+				  if ((strstr(argv[paramIdx], "-d=") != NULL) &&
+					  (strlen(argv[paramIdx]) > 3))
+				  {
+					  /* Store the pointer to the device name. */
+					  rs485Settings->portName = &argv[paramIdx][3];
+					  /* Continue with next loop iteration. */
+					  continue;
+				  }
+				  /* Is this the -b=[value] parameter? */
+				  if ((strstr(argv[paramIdx], "-b=") != NULL) &&
+					  (strlen(argv[paramIdx]) > 3))
+				  {
+					  /* Extract the baudrate value. */
+					  sscanf(&argv[paramIdx][3], "%u", &(rs485Settings->baudrate));
+					  /* Continue with next loop iteration. */
+					  continue;
+				  }
+
+                  /* Is this the -rid=[value] parameter? */
+                  if ((strstr(argv[paramIdx], "-rid=") != NULL) &&
+                      (strlen(argv[paramIdx]) > 5))
+                  {
+                      /* Extract the rs485 slave address. */
+                      sscanf(&argv[paramIdx][5], "%u", &(rs485Settings->SlaveAddr));
+                      /* Continue with next loop iteration. */
+                      continue;
+                  }
+			  }
+		  }
+		  break;
+		  /* -------------------------- Unknown ------------------------------------------ */
+	  default:
+		  /* Noting to extract. */
+		  break;
+	  }
   }
   /* Give the result back to the caller. */
   return result;
