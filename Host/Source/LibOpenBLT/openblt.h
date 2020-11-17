@@ -113,6 +113,7 @@ LIBOPENBLT_EXPORT char const * BltVersionGetString(void);
  */
 #define BLT_TRANSPORT_XCP_V10_NET      ((uint32_t)3u)
 
+#define BLT_TRANSPORT_XCP_V10_RS485    ((uint32_t)4u)
 
 /****************************************************************************************
 * Type definitions
@@ -140,6 +141,17 @@ typedef struct t_blt_transport_settings_xcp_v10_rs232
   char const * portName;         /**< Communication port name such as /dev/tty0.       */
   uint32_t baudrate;             /**< Communication speed in bits/sec.                 */
 } tBltTransportSettingsXcpV10Rs232;
+
+
+typedef struct t_blt_transport_settings_xcp_v10_rs485
+{
+    char const * portName;               /**< Interface port name, i.e. /dev/ttyUSB0.     */
+    uint32_t baudrate;                   /**< Communication speed in bits/sec.           */
+    uint32_t SlaveAddr;                  /**< Slave Address, scanf를 사용함으로 입력변수 처리를 위해 32bit로 선언함. */
+    uint32_t FuncCode;                   /**< Set to 16    , scanf를 사용함으로 입력변수 처리를 위해 32bit로 선언함. */
+    uint32_t RegAddr;                    /**< Set to 0x1f  , scanf를 사용함으로 입력변수 처리를 위해 32bit로 선언함. */
+    uint32_t CRC16;                      /**< Set to CRC16 , scanf를 사용함으로 입력변수 처리를 위해 32bit로 선언함. */
+} tBltTransportSettingsXcpV10Rs485;
 
 /** \brief Structure layout of the XCP version 1.0 CAN transport layer settings. The
  *         deviceName field is platform dependent. On Linux based systems this should be

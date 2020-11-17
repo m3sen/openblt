@@ -42,6 +42,7 @@
 #include "xcptpcan.h"                       /* XCP CAN transport layer                 */
 #include "xcptpusb.h"                       /* XCP USB transport layer                 */
 #include "xcptpnet.h"                       /* XCP TCP/IP transport layer              */
+#include "xcptprs485.h"                       /* XCP TCP/IP transport layer              */
 
 
 /****************************************************************************************
@@ -121,7 +122,9 @@ LIBOPENBLT_EXPORT void BltSessionInit(uint32_t sessionType,
   assert( (transportType == BLT_TRANSPORT_XCP_V10_RS232) || \
           (transportType == BLT_TRANSPORT_XCP_V10_CAN) || \
           (transportType == BLT_TRANSPORT_XCP_V10_USB) || \
-          (transportType == BLT_TRANSPORT_XCP_V10_NET) );
+          (transportType == BLT_TRANSPORT_XCP_V10_NET) || \
+          (transportType == BLT_TRANSPORT_XCP_V10_RS485)
+  );
 
   /* Initialize the correct session. */
   if (sessionType == BLT_SESSION_XCP_V10) /*lint !e774 */
@@ -235,6 +238,35 @@ LIBOPENBLT_EXPORT void BltSessionInit(uint32_t sessionType,
           /* Link the transport layer to the XCP loader settings. */
           xcpLoaderSettings.transport = XcpTpNetGetTransport();
         }
+      }
+      else if (transportType == BLT_TRANSPORT_XCP_V10_RS485)
+      {
+          /* Verify transportSettings parameters because the XCP RS485 transport layer
+           * requires them.
+           */
+          assert(transportSettings != NULL);
+          /* Only continue if the transportSettings parameter is valid. */
+          if (transportSettings != NULL) /*lint !e774 */
+          {
+              /* Cast transport settings to the correct type. */
+              tBltTransportSettingsXcpV10Rs485* bltTransportSettingsXcpV10Rs485Ptr;
+              bltTransportSettingsXcpV10Rs485Ptr =
+                  (tBltTransportSettingsXcpV10Rs485*)transportSettings;
+              /* Convert transport settings to the format supported by the XCP UART transport
+               * layer. It was made static to make sure it doesn't get out of scope when
+               * used in xcpLoaderSettings.
+               */
+              static tXcpTpRs485Settings xcpTpRs485Settings;
+              xcpTpRs485Settings.baudrate = bltTransportSettingsXcpV10Rs485Ptr->baudrate;
+              xcpTpRs485Settings.portname = bltTransportSettingsXcpV10Rs485Ptr->portName;
+              xcpTpRs485Settings.SlaveAddr = bltTransportSettingsXcpV10Rs485Ptr->SlaveAddr;
+              xcpTpRs485Settings.FuncCode = bltTransportSettingsXcpV10Rs485Ptr->FuncCode;
+              xcpTpRs485Settings.RegAddr = bltTransportSettingsXcpV10Rs485Ptr->RegAddr;
+              /* Store transport layer settings in the XCP loader settings. */
+              xcpLoaderSettings.transportSettings = &xcpTpRs485Settings;
+              /* Link the transport layer to the XCP loader settings. */
+              xcpLoaderSettings.transport = XcpTpRs485GetTransport();
+          }
       }
       /* Perform actual session initialization. */
       SessionInit(XcpLoaderGetProtocol(), &xcpLoaderSettings);
