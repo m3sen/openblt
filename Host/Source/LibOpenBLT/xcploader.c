@@ -735,6 +735,7 @@ static bool XcpLoaderSendCmdConnect(void)
   {
     /* Init the result value to okay and only set it to error when a problem occurred. */
     result = true;
+
     /* Prepare the command packet. */
     cmdPacket.data[0] = XCPLOADER_CMD_CONNECT;
     cmdPacket.data[1] = xcpSettings.connectMode;

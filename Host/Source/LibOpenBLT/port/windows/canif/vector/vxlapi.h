@@ -2437,7 +2437,7 @@ typedef struct xl_daio_set_port{
 // defines for xlIoSetDigitalOutput
 typedef struct xl_daio_digital_params{
   unsigned int portMask;     //!< Use defines XL_DAIO_PORT_MASK_DIGITAL_*
-  unsigned int valueMask;    //!< Specify the port value (ON/HIGH – 1 | OFF/LOW - 0)
+  unsigned int valueMask;    //!< Specify the port value (ON/HIGH ?1 | OFF/LOW - 0)
 } XLdaioDigitalParams;
 
 // defines for portMask

@@ -52,7 +52,7 @@ static void XcpTpRs485Disconnect(void);
 static bool XcpTpRs485SendPacket(tXcpTransportPacket const * txPacket, 
                                 tXcpTransportPacket * rxPacket, uint16_t timeout);
 
- 
+uint16_t ModbusCRC16(uint8_t* pucFrame, uint16_t usLen);
 /****************************************************************************************
 * Local constant declarations
 ****************************************************************************************/
@@ -195,6 +195,35 @@ static bool XcpTpRs485Connect(void)
     /* Connect to the serial port. */
     result = SerialPortOpen(tpRs485Settings.portname, baudrate);
   }
+#define USE_SHC_BROADCAST 1
+
+#if defined(USE_SHC_BROADCAST) && USE_SHC_BROADCAST
+  static uint8_t rs485Buffer[XCPLOADER_PACKET_SIZE_MAX + 9];
+  /* Set result value to okay and only change it from now on if an error occurred. */
+  /* Prepare the XCP packet for transmission on UART. This is basically the same as
+   * the XCP packet data but just the length of the packet is added to the first
+   * byte.
+   */
+   // Slave Address: Function : code : Data Data Data : CRC  Lo : CRC Hi 
+  rs485Buffer[0] = (uint8_t)0; // broadcasting
+  rs485Buffer[1] = (uint8_t)5; // write single coil
+  rs485Buffer[2] = (uint8_t)0;// ((tpRs485Settings.RegAddr >> 8) & 0xFF); //Holding register address Hi
+  rs485Buffer[3] = (uint8_t)33;// (tpRs485Settings.RegAddr & 0xFF); //Holdign register address Lo
+  rs485Buffer[4] = 0xff; // true 0x00 //false
+  rs485Buffer[5] = 0x00; // true 0x00 //false
+
+  uint16_t ui16Crc = ModbusCRC16(rs485Buffer, 6);
+
+  rs485Buffer[6] = (uint8_t)(ui16Crc & 0xFF); //0xA5; //CRC low byte
+  rs485Buffer[7] = (uint8_t)((ui16Crc >> 8) & 0xff); // 0xA5; //CRC high byte
+
+  /* Transmit the packet. */
+  if (!SerialPortWrite(rs485Buffer,8))
+  {
+      result = false;
+  }
+#endif
+
   /* Give the result back to the caller. */
   return result;
 } /*** end of XcpTpUartConnect ***/
@@ -302,8 +331,70 @@ static bool XcpTpRs485SendPacket(tXcpTransportPacket const * txPacket,
   assert(rxPacket != NULL);
 
   /* Only continue with valid parameters. */
-  if ( (txPacket != NULL) && (rxPacket != NULL) ) /*lint !e774 */
+  if ((txPacket != NULL) && (rxPacket != NULL)) /*lint !e774 */
   {
+#if defined(USE_SHC_BROADCAST) && USE_SHC_BROADCAST
+	  if (0xD2/*XCPLOADER_CMD_PROGRAM_START*/ == txPacket->data[0])
+	  {
+		  /* Set result value to okay and only change it from now on if an error occurred. */
+		  /* Prepare the XCP packet for transmission on UART. This is basically the same as
+		   * the XCP packet data but just the length of the packet is added to the first
+		   * byte.
+		   */
+		   // Slave Address: Function : code : Data Data Data : CRC  Lo : CRC Hi 
+		  rs485Buffer[0] = (uint8_t)0; // broadcasting
+		  rs485Buffer[1] = (uint8_t)5; // write single coil
+		  rs485Buffer[2] = (uint8_t)0;// ((tpRs485Settings.RegAddr >> 8) & 0xFF); //Holding register address Hi
+		  rs485Buffer[3] = (uint8_t)33;// (tpRs485Settings.RegAddr & 0xFF); //Holdign register address Lo
+		  rs485Buffer[4] = 0xff; // true 0x00 //false
+		  rs485Buffer[5] = 0x00; // true 0x00 //false
+
+		  uint16_t ui16Crc = ModbusCRC16(rs485Buffer, 6);
+
+		  rs485Buffer[6] = (uint8_t)(ui16Crc & 0xFF); //0xA5; //CRC low byte
+		  rs485Buffer[7] = (uint8_t)((ui16Crc >> 8) & 0xff); // 0xA5; //CRC high byte
+
+		  /* Transmit the packet. */
+		  if (!SerialPortWrite(rs485Buffer, 8))
+		  {
+			  result = false;
+		  }
+          _sleep(100);
+	  }
+
+      if (0xCF/*XCPLOADER_CMD_PROGRAM_RESET*/ == txPacket->data[0])
+      {
+          /* Set result value to okay and only change it from now on if an error occurred. */
+          /* Prepare the XCP packet for transmission on UART. This is basically the same as
+           * the XCP packet data but just the length of the packet is added to the first
+           * byte.
+           */
+           // Slave Address: Function : code : Data Data Data : CRC  Lo : CRC Hi 
+          rs485Buffer[0] = (uint8_t)0; // broadcasting
+          rs485Buffer[1] = (uint8_t)5; // write single coil
+          rs485Buffer[2] = (uint8_t)0;// ((tpRs485Settings.RegAddr >> 8) & 0xFF); //Holding register address Hi
+          rs485Buffer[3] = (uint8_t)32;// (tpRs485Settings.RegAddr & 0xFF); //Holdign register address Lo
+          rs485Buffer[4] = 0xff; // true 0x00 //false
+          rs485Buffer[5] = 0x00; // true 0x00 //false
+
+          uint16_t ui16Crc = ModbusCRC16(rs485Buffer, 6);
+
+          rs485Buffer[6] = (uint8_t)(ui16Crc & 0xFF); //0xA5; //CRC low byte
+          rs485Buffer[7] = (uint8_t)((ui16Crc >> 8) & 0xff); // 0xA5; //CRC high byte
+
+          /* Transmit the packet. */
+          if (!SerialPortWrite(rs485Buffer, 8))
+          {
+              result = false;
+          }
+          _sleep(100);
+      }
+
+// #define XCPLOADER_CMD_PROGRAM_START   (0xD2u)    /**< XCP program start command code.  */
+// #define XCPLOADER_CMD_PROGRAM_CLEAR   (0xD1u)    /**< XCP program clear command code.  */
+// #define XCPLOADER_CMD_PROGRAM         (0xD0u)    /**< XCP program command code.        */
+// #define XCPLOADER_CMD_PROGRAM_RESET   (0xCFu)    /**< XCP program reset command code.  */
+#endif
     /* Set result value to okay and only change it from now on if an error occurred. */
     result = true;
     /* Prepare the XCP packet for transmission on UART. This is basically the same as 
