@@ -456,7 +456,7 @@ static bool XcpTpRs485SendPacket(tXcpTransportPacket const *txPacket,
             }
             tty_delay(DV(8, 10, 9600)); //9800, 1stop, no parity, 8bit : 10bit/char
             GPIOWrite(18, 0);
-            //UtilTimeDelayMs(100); // sleep(100);
+            UtilTimeDelayMs(100); // sleep(100);
         }
 
         if (0xCF /*XCPLOADER_CMD_PROGRAM_RESET*/ == txPacket->data[0]) {
@@ -486,7 +486,7 @@ static bool XcpTpRs485SendPacket(tXcpTransportPacket const *txPacket,
             }
             tty_delay(DV(8, 10, 9600)); //9800, 1stop, no parity, 8bit : 10bit/char
             GPIOWrite(18, 0);
-            //UtilTimeDelayMs(100);
+            UtilTimeDelayMs(100);
         }
 
 // #define XCPLOADER_CMD_PROGRAM_START   (0xD2u)    /**< XCP program start command code.  */
