@@ -60,7 +60,7 @@
  * b - bits per character
  * s - bits per second
  */
-#define DV(c, b, s) ((c) * (b) * 1000000l / (s))
+#define DV(c, b, s) ((c) * (b)*1000000l / (s))
 
 static int GPIOExport(int pin);
 static int GPIOUnexport(int pin);
@@ -456,8 +456,7 @@ static bool XcpTpRs485SendPacket(tXcpTransportPacket const *txPacket,
             }
             tty_delay(DV(8, 10, 9600)); //9800, 1stop, no parity, 8bit : 10bit/char
             GPIOWrite(18, 0);
-
-            sleep(100);
+            //UtilTimeDelayMs(100); // sleep(100);
         }
 
         if (0xCF /*XCPLOADER_CMD_PROGRAM_RESET*/ == txPacket->data[0]) {
@@ -487,8 +486,7 @@ static bool XcpTpRs485SendPacket(tXcpTransportPacket const *txPacket,
             }
             tty_delay(DV(8, 10, 9600)); //9800, 1stop, no parity, 8bit : 10bit/char
             GPIOWrite(18, 0);
-
-            sleep(100);
+            //UtilTimeDelayMs(100);
         }
 
 // #define XCPLOADER_CMD_PROGRAM_START   (0xD2u)    /**< XCP program start command code.  */
@@ -524,11 +522,10 @@ static bool XcpTpRs485SendPacket(tXcpTransportPacket const *txPacket,
         /* Transmit the packet. */
         GPIOWrite(18, 1);
         tty_delay(35000000l / 9600);
-        //printf("set GPIO 18 to 0\n");
         if (!SerialPortWrite(rs485Buffer, txPacket->len + 9)) {
             result = false;
         }
-        tty_delay(DV(txPacket->len + 9, 10, 9600)); //9800, 1stop, no parity, 8bit : 10bit/char
+        tty_delay(DV((uint32_t)(txPacket->len + 9), 10, 9600)); //9600, 1stop, no parity, 8bit : 10bit/char
         GPIOWrite(18, 0);
 
         /* Only continue if the transmission was successful. */
@@ -567,6 +564,7 @@ static bool XcpTpRs485SendPacket(tXcpTransportPacket const *txPacket,
                     if ((byteIdx + 1) == rxPacket->len) {
                         /* Set flag and stop the loop. */
                         packetReceptionComplete = true;
+                        //printf("receive complete\n");
                         break;
                     }
                     /* Increment indexer to the next byte. */
